@@ -565,27 +565,39 @@
       (data.timepoints || []).map((point) => [point.markName, point.timeSeconds])
     );
     const segments = tokens.map((token, index) => {
-      const start = timepointMap.get(`w${index}`);
+      const start = timepointMap.get(`w${index}s`);
       if (typeof start !== "number") return null;
 
-      let end = null;
-      for (let nextIndex = index + 1; nextIndex < tokens.length; nextIndex += 1) {
-        const nextStart = timepointMap.get(`w${nextIndex}`);
-        if (typeof nextStart === "number") {
-          end = Math.max(start, nextStart - 0.03);
-          break;
-        }
-      }
+      const markedEnd = timepointMap.get(`w${index}e`);
+      const nextStart = findNextGoogleStart(timepointMap, index);
+      const rawEnd =
+        typeof markedEnd === "number"
+          ? markedEnd
+          : typeof nextStart === "number"
+            ? nextStart
+            : null;
+
+      const segmentStart = Math.max(0, start + 0.005);
+      const segmentEnd =
+        typeof rawEnd === "number" ? Math.max(segmentStart + 0.08, rawEnd - 0.015) : null;
 
       return {
         url,
-        start,
-        end,
+        start: segmentStart,
+        end: segmentEnd,
         label: "Google Cloud TTS",
       };
     });
 
     return { url, segments };
+  }
+
+  function findNextGoogleStart(timepointMap, index) {
+    for (let nextIndex = index + 1; nextIndex < tokens.length; nextIndex += 1) {
+      const nextStart = timepointMap.get(`w${nextIndex}s`);
+      if (typeof nextStart === "number") return nextStart - 0.04;
+    }
+    return null;
   }
 
   function buildGoogleVoiceConfig() {
@@ -604,8 +616,9 @@
       const word = match[0];
       const start = match.index || 0;
       ssml += escapeSsml(text.slice(lastIndex, start));
-      ssml += `<mark name="w${wordIndex}"/>`;
+      ssml += `<mark name="w${wordIndex}s"/>`;
       ssml += escapeSsml(word);
+      ssml += `<mark name="w${wordIndex}e"/>`;
       lastIndex = start + word.length;
       wordIndex += 1;
     }
@@ -841,11 +854,14 @@
         } else if (Number.isFinite(end) && audio.currentTime >= end) {
           audio.pause();
           finish(resolve);
+        } else {
+          applySegmentFade(audio, segment.start, end);
         }
-      }, 30);
+      }, 20);
 
       currentAudio = audio;
       audio.playbackRate = getSpeed();
+      audio.volume = 0;
       audio.addEventListener(
         "loadedmetadata",
         () => {
@@ -857,6 +873,22 @@
       audio.addEventListener("error", (event) => finish(reject, event), { once: true });
       audio.addEventListener("ended", () => finish(resolve), { once: true });
     });
+  }
+
+  function applySegmentFade(audio, start, end) {
+    const fadeIn = 0.035;
+    const fadeOut = 0.05;
+    const sinceStart = audio.currentTime - start;
+    let volume = sinceStart < fadeIn ? Math.max(0, sinceStart / fadeIn) : 1;
+
+    if (Number.isFinite(end)) {
+      const untilEnd = end - audio.currentTime;
+      if (untilEnd < fadeOut) {
+        volume = Math.min(volume, Math.max(0, untilEnd / fadeOut));
+      }
+    }
+
+    audio.volume = Math.min(1, Math.max(0, volume));
   }
 
   function speakWithBrowser(token, activeRun) {
