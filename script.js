@@ -126,7 +126,7 @@
     els.googleVoiceNameInput.value = savedSettings.googleVoiceName || "";
     setValue(els.orderSelect, savedSettings.order || "normal");
     setValue(els.speedRange, savedSettings.speed || "0.9");
-    setValue(els.delayRange, savedSettings.delay || "1");
+    setValue(els.delayRange, savedSettings.delay ?? "0");
     setValue(els.preloadRange, savedSettings.preload || "5");
     setValue(els.themeSelect, savedSettings.theme || "auto");
     els.autoToggle.checked = savedSettings.autoPlay !== false;
