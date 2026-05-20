@@ -61,8 +61,8 @@
 
   function bindEvents() {
     els.playButton.addEventListener("click", handlePlay);
-    els.prevButton.addEventListener("click", () => moveSelection(-1));
-    els.nextButton.addEventListener("click", () => moveSelection(1));
+    els.prevButton.addEventListener("click", () => moveSelection(-1, true));
+    els.nextButton.addEventListener("click", () => moveSelection(1, true));
     els.manualModeButton.addEventListener("click", () => setAutoPlayMode(false));
     els.autoModeButton.addEventListener("click", () => setAutoPlayMode(true));
     els.pauseButton.addEventListener("click", pausePlayback);
@@ -193,21 +193,17 @@
 
     if (event.key === "ArrowLeft") {
       event.preventDefault();
-      moveSelection(-1);
+      moveSelection(-1, true);
       return;
     }
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      moveSelection(1);
+      moveSelection(1, true);
       return;
     }
     if (event.key === " ") {
       event.preventDefault();
-      if (isPlaying) {
-        pausePlayback();
-      } else {
-        handlePlay();
-      }
+      moveSelection(event.shiftKey ? -1 : 1, true);
     }
   }
 
@@ -343,16 +339,19 @@
     startPlayback(currentIndex);
   }
 
-  function moveSelection(delta) {
+  function moveSelection(delta, shouldPlay) {
     if (!tokens.length) {
       rebuildFromEditorText();
       return;
     }
-    pausePlayback();
+    stopPlayback();
     currentIndex = clamp(currentIndex + delta, 0, tokens.length - 1);
-    updateStatus("選択中");
+    updateStatus(shouldPlay ? "再生準備中" : "選択中");
     prefetchAhead(currentIndex);
     scrollActiveWordIntoView();
+    if (shouldPlay) {
+      playSingle(currentIndex);
+    }
   }
 
   async function startPlayback(startIndex) {
