@@ -975,8 +975,8 @@
   }
 
   function applySegmentFade(audio, start, end) {
-    const fadeIn = 0.035;
-    const fadeOut = 0.05;
+    const fadeIn = 0.00;
+    const fadeOut = 0.00;
     const sinceStart = audio.currentTime - start;
     let volume = sinceStart < fadeIn ? Math.max(0, sinceStart / fadeIn) : 1;
 
