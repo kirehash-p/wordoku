@@ -10,6 +10,8 @@
     textInput: document.getElementById("textInput"),
     languageSelect: document.getElementById("languageSelect"),
     sourceSelect: document.getElementById("sourceSelect"),
+    googleApiKeyInput: document.getElementById("googleApiKeyInput"),
+    googleVoiceNameInput: document.getElementById("googleVoiceNameInput"),
     voiceSelect: document.getElementById("voiceSelect"),
     orderSelect: document.getElementById("orderSelect"),
     speedRange: document.getElementById("speedRange"),
@@ -40,6 +42,8 @@
 
   const audioCache = new Map();
   const audioRequests = new Map();
+  const googleContextCache = new Map();
+  const googleContextRequests = new Map();
   const mediaPreloadCache = new Map();
   let tokens = [];
   let currentIndex = 0;
@@ -78,6 +82,8 @@
     [
       els.languageSelect,
       els.sourceSelect,
+      els.googleApiKeyInput,
+      els.googleVoiceNameInput,
       els.voiceSelect,
       els.orderSelect,
       els.speedRange,
@@ -113,6 +119,8 @@
   function restoreSettings() {
     setValue(els.languageSelect, savedSettings.language || "en-US");
     setValue(els.sourceSelect, savedSettings.source || "auto");
+    els.googleApiKeyInput.value = savedSettings.googleApiKey || "";
+    els.googleVoiceNameInput.value = savedSettings.googleVoiceName || "";
     setValue(els.orderSelect, savedSettings.order || "normal");
     setValue(els.speedRange, savedSettings.speed || "0.9");
     setValue(els.delayRange, savedSettings.delay || "1");
@@ -134,6 +142,8 @@
     const settings = {
       language: els.languageSelect.value,
       source: els.sourceSelect.value,
+      googleApiKey: els.googleApiKeyInput.value.trim(),
+      googleVoiceName: els.googleVoiceNameInput.value.trim(),
       voice: els.voiceSelect.value,
       order: els.orderSelect.value,
       speed: els.speedRange.value,
@@ -151,7 +161,12 @@
     if (event?.target === els.autoToggle) updateModeUi();
     applyTheme();
     saveSettings();
-    if (event?.target === els.languageSelect || event?.target === els.sourceSelect) {
+    if (
+      event?.target === els.languageSelect ||
+      event?.target === els.sourceSelect ||
+      event?.target === els.googleApiKeyInput ||
+      event?.target === els.googleVoiceNameInput
+    ) {
       rebuildFromEditorText();
     }
     if (event?.target === els.preloadRange) {
@@ -276,7 +291,12 @@
       span.textContent = word;
       fragment.append(span);
 
-      tokens.push({ word, lang: els.languageSelect.value });
+      tokens.push({
+        word,
+        lang: els.languageSelect.value,
+        start,
+        end: start + word.length,
+      });
       lastIndex = start + word.length;
     }
 
@@ -287,7 +307,11 @@
     els.textInput.replaceChildren(fragment);
     currentIndex = preserveCurrentIndex(previousWord, previousIndex);
     localStorage.setItem(textStorageKey, normalizedText);
-    syncAllAudioStates();
+    if (els.sourceSelect.value === "google") {
+      setAllWordAudioState("pending");
+    } else {
+      syncAllAudioStates();
+    }
     updateStatus(tokens.length ? "準備完了" : "単語がありません");
     prefetchAhead(currentIndex);
   }
@@ -407,6 +431,17 @@
 
     try {
       const source = els.sourceSelect.value;
+      if (source === "google") {
+        const segment = await findGoogleSegment(index);
+        if (activeRun !== runId) return;
+        if (segment) {
+          updateStatus(segment.label);
+          await playAudioSegment(segment, activeRun);
+          return;
+        }
+        updateStatus("Google Cloud音声なし");
+      }
+
       if (source !== "speech") {
         const audio = await findPronunciationAudio(token, index);
         if (activeRun !== runId) return;
@@ -440,6 +475,7 @@
 
   async function prefetchAhead(startIndex) {
     if (els.sourceSelect.value === "speech") return;
+    if (els.sourceSelect.value === "google") return;
     const count = getPreloadCount();
     if (!count) return;
 
@@ -455,6 +491,137 @@
         mediaPreloadCache.set(audio.url, preload);
       })
     );
+  }
+
+  async function findGoogleSegment(index) {
+    const token = tokens[index];
+    const apiKey = els.googleApiKeyInput.value.trim();
+    if (!token || !apiKey) return null;
+
+    const bundle = await getGoogleContextBundle(apiKey);
+    return bundle?.segments[index] || null;
+  }
+
+  async function getGoogleContextBundle(apiKey) {
+    const cacheKey = makeGoogleContextKey(apiKey);
+    if (googleContextCache.has(cacheKey)) return googleContextCache.get(cacheKey);
+    if (googleContextRequests.has(cacheKey)) return googleContextRequests.get(cacheKey);
+
+    setAllWordAudioState("preloading");
+    const request = synthesizeGoogleContext(apiKey)
+      .then((bundle) => {
+        googleContextCache.set(cacheKey, bundle);
+        setAllWordAudioState("ready");
+        return bundle;
+      })
+      .catch((error) => {
+        setAllWordAudioState("missing");
+        throw error;
+      })
+      .finally(() => {
+        googleContextRequests.delete(cacheKey);
+      });
+
+    googleContextRequests.set(cacheKey, request);
+    return request;
+  }
+
+  async function synthesizeGoogleContext(apiKey) {
+    if (!tokens.length) return null;
+
+    const response = await fetch(
+      `https://texttospeech.googleapis.com/v1beta1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: { ssml: buildMarkedSsml(getEditorText()) },
+          voice: buildGoogleVoiceConfig(),
+          audioConfig: { audioEncoding: "MP3" },
+          enableTimePointing: ["SSML_MARK"],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => "");
+      throw new Error(`Google Cloud TTS failed: ${response.status} ${message}`);
+    }
+
+    const data = await response.json();
+    if (!data.audioContent) return null;
+
+    const url = createAudioUrlFromBase64(data.audioContent, "audio/mpeg");
+    const timepointMap = new Map(
+      (data.timepoints || []).map((point) => [point.markName, point.timeSeconds])
+    );
+    const segments = tokens.map((token, index) => {
+      const start = timepointMap.get(`w${index}`);
+      if (typeof start !== "number") return null;
+
+      let end = null;
+      for (let nextIndex = index + 1; nextIndex < tokens.length; nextIndex += 1) {
+        const nextStart = timepointMap.get(`w${nextIndex}`);
+        if (typeof nextStart === "number") {
+          end = Math.max(start, nextStart - 0.03);
+          break;
+        }
+      }
+
+      return {
+        url,
+        start,
+        end,
+        label: "Google Cloud TTS",
+      };
+    });
+
+    return { url, segments };
+  }
+
+  function buildGoogleVoiceConfig() {
+    const config = { languageCode: els.languageSelect.value };
+    const voiceName = els.googleVoiceNameInput.value.trim();
+    if (voiceName) config.name = voiceName;
+    return config;
+  }
+
+  function buildMarkedSsml(text) {
+    let ssml = "<speak>";
+    let lastIndex = 0;
+    let wordIndex = 0;
+
+    for (const match of text.matchAll(wordPattern)) {
+      const word = match[0];
+      const start = match.index || 0;
+      ssml += escapeSsml(text.slice(lastIndex, start));
+      ssml += `<mark name="w${wordIndex}"/>`;
+      ssml += escapeSsml(word);
+      lastIndex = start + word.length;
+      wordIndex += 1;
+    }
+
+    ssml += escapeSsml(text.slice(lastIndex));
+    ssml += "</speak>";
+    return ssml;
+  }
+
+  function escapeSsml(value) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  }
+
+  function createAudioUrlFromBase64(base64, mimeType) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
   }
 
   async function findPronunciationAudio(token, index) {
@@ -646,6 +813,43 @@
     });
   }
 
+  function playAudioSegment(segment, activeRun) {
+    stopCurrentAudioOnly();
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(segment.url);
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(watcher);
+        callback(value);
+      };
+      const watcher = window.setInterval(() => {
+        const end = segment.end ?? audio.duration;
+        if (activeRun !== runId) {
+          audio.pause();
+          finish(resolve);
+        } else if (Number.isFinite(end) && audio.currentTime >= end) {
+          audio.pause();
+          finish(resolve);
+        }
+      }, 30);
+
+      currentAudio = audio;
+      audio.playbackRate = getSpeed();
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          audio.currentTime = segment.start;
+          audio.play().catch((error) => finish(reject, error));
+        },
+        { once: true }
+      );
+      audio.addEventListener("error", (event) => finish(reject, event), { once: true });
+      audio.addEventListener("ended", () => finish(resolve), { once: true });
+    });
+  }
+
   function speakWithBrowser(token, activeRun) {
     if (!("speechSynthesis" in window)) return Promise.reject(new Error("No speechSynthesis"));
     stopCurrentAudioOnly();
@@ -812,6 +1016,13 @@
     });
   }
 
+  function setAllWordAudioState(state) {
+    els.textInput.querySelectorAll(".word-token").forEach((span) => {
+      span.classList.remove("ready", "preloading", "missing");
+      if (state !== "pending") span.classList.add(state);
+    });
+  }
+
   function updateStatus(message) {
     els.sourceText.textContent = message;
     updateActiveWord();
@@ -833,6 +1044,15 @@
   function makeCacheKey(token) {
     const word = els.normalizeToggle.checked ? normalizeWord(token.word) : token.word;
     return `${token.lang}:${word}`;
+  }
+
+  function makeGoogleContextKey(apiKey) {
+    return [
+      els.languageSelect.value,
+      els.googleVoiceNameInput.value.trim(),
+      apiKey,
+      getEditorText(),
+    ].join("\n");
   }
 
   function getSpeed() {

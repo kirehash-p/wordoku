@@ -53,9 +53,15 @@ input {
 
 button,
 select,
+input,
 input[type="range"],
 input[type="checkbox"] {
   cursor: pointer;
+}
+
+input[type="password"],
+input[type="text"] {
+  cursor: text;
 }
 
 .shell {
@@ -358,7 +364,9 @@ h2 {
   gap: 8px;
 }
 
-select {
+select,
+input[type="password"],
+input[type="text"] {
   width: 100%;
   height: 42px;
   padding: 0 12px;
@@ -369,7 +377,9 @@ select {
   outline: none;
 }
 
-select:focus {
+select:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }

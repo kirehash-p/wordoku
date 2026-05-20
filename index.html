@@ -84,10 +84,33 @@
         <label class="field">
           <span>音声ソース</span>
           <select id="sourceSelect">
+            <option value="google">Google Cloud TTS（文脈付き）</option>
             <option value="auto">発音ライブラリ優先、なければブラウザTTS</option>
             <option value="library">発音ライブラリのみ</option>
             <option value="speech">ブラウザTTSのみ</option>
           </select>
+        </label>
+
+        <label class="field">
+          <span>Google Cloud APIキー</span>
+          <input
+            id="googleApiKeyInput"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="AIza..."
+          >
+        </label>
+
+        <label class="field">
+          <span>Google Cloud 音声名</span>
+          <input
+            id="googleVoiceNameInput"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="空欄なら言語に合わせて自動選択"
+          >
         </label>
 
         <label class="field">
