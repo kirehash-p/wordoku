@@ -472,7 +472,10 @@
     setAudioStateForKey(cacheKey, "preloading");
     const request = (async () => {
       let result = null;
-      if (token.lang.startsWith("en")) {
+      if (token.lang.startsWith("ru")) {
+        result = await lookupOpenRussian(token);
+      }
+      if (!result && token.lang.startsWith("en")) {
         result = await lookupDictionaryApi(token);
       }
       if (!result) {
@@ -492,6 +495,44 @@
       markWord(index, "preloading", false);
       syncAudioStateForKey(cacheKey);
     }
+  }
+
+  async function lookupOpenRussian(token) {
+    const word = normalizeWord(token.word);
+    if (!word || !/^[а-яё-]+$/iu.test(word)) return null;
+
+    const url = `https://api.openrussian.org/read/ru/${encodeURIComponent(word)}`;
+    const canLoad = await probeAudioUrl(url);
+    if (!canLoad) return null;
+
+    return {
+      url,
+      label: "OpenRussian/Shtooka音声",
+    };
+  }
+
+  function probeAudioUrl(url) {
+    if (mediaPreloadCache.has(url)) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        if (result) mediaPreloadCache.set(url, audio);
+        resolve(result);
+      };
+      const timer = window.setTimeout(() => finish(false), 4500);
+
+      audio.preload = "metadata";
+      audio.addEventListener("loadedmetadata", () => finish(true), { once: true });
+      audio.addEventListener("canplaythrough", () => finish(true), { once: true });
+      audio.addEventListener("error", () => finish(false), { once: true });
+      audio.src = url;
+      audio.load();
+    });
   }
 
   async function lookupDictionaryApi(token) {
