@@ -92,7 +92,16 @@
         </label>
 
         <label class="field">
-          <span>Google Cloud APIキー</span>
+          <span class="field-heading">
+            Google Cloud APIキー
+            <button
+              id="googleApiHelpButton"
+              class="info-button"
+              type="button"
+              aria-expanded="false"
+              aria-controls="googleApiHelp"
+            >i</button>
+          </span>
           <input
             id="googleApiKeyInput"
             type="password"
@@ -101,6 +110,27 @@
             placeholder="AIza..."
           >
         </label>
+
+        <section id="googleApiHelp" class="help-panel" hidden>
+          <h3>Google Cloud TTSキーの取得方法</h3>
+          <ol>
+            <li>Google Cloud Consoleでプロジェクトを作成、または既存プロジェクトを選択します。</li>
+            <li>課金を有効にします。無料枠内なら通常は課金されませんが、有効化は必要です。</li>
+            <li>「Cloud Text-to-Speech API」を検索して有効化します。</li>
+            <li>「APIとサービス」→「認証情報」を開きます。</li>
+            <li>「認証情報を作成」→「APIキー」を選び、表示されたキーをコピーします。</li>
+            <li>作成したキーを開き、アプリケーションの制限で「HTTPリファラー」を選びます。</li>
+            <li>許可するリファラーに <code>https://kirehash-p.github.io/*</code> を追加します。</li>
+            <li>APIの制限で「キーを制限」を選び、「Cloud Text-to-Speech API」だけを許可します。</li>
+          </ol>
+          <p>
+            このキーはこのブラウザのlocalStorageに保存されます。共有PCでは使い終わったら削除してください。
+          </p>
+          <div class="help-links">
+            <a href="https://cloud.google.com/text-to-speech/docs/before-you-begin" target="_blank" rel="noreferrer">Text-to-Speechの準備</a>
+            <a href="https://cloud.google.com/docs/authentication/api-keys" target="_blank" rel="noreferrer">APIキーの作成と制限</a>
+          </div>
+        </section>
 
         <label class="field">
           <span>Google Cloud 音声名</span>

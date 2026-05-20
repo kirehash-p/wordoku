@@ -11,6 +11,8 @@
     languageSelect: document.getElementById("languageSelect"),
     sourceSelect: document.getElementById("sourceSelect"),
     googleApiKeyInput: document.getElementById("googleApiKeyInput"),
+    googleApiHelpButton: document.getElementById("googleApiHelpButton"),
+    googleApiHelp: document.getElementById("googleApiHelp"),
     googleVoiceNameInput: document.getElementById("googleVoiceNameInput"),
     voiceSelect: document.getElementById("voiceSelect"),
     orderSelect: document.getElementById("orderSelect"),
@@ -74,6 +76,7 @@
     els.settingsButton.addEventListener("click", openSettings);
     els.settingsCloseButton.addEventListener("click", closeSettings);
     els.settingsBackdrop.addEventListener("click", closeSettings);
+    els.googleApiHelpButton.addEventListener("click", toggleGoogleApiHelp);
 
     els.textInput.addEventListener("click", handleEditorClick);
     els.textInput.addEventListener("paste", handlePaste);
@@ -197,6 +200,12 @@
     els.settingsPanel.setAttribute("aria-hidden", "true");
     els.settingsBackdrop.hidden = true;
     els.settingsButton.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleGoogleApiHelp() {
+    const willOpen = els.googleApiHelp.hidden;
+    els.googleApiHelp.hidden = !willOpen;
+    els.googleApiHelpButton.setAttribute("aria-expanded", String(willOpen));
   }
 
   function handleKeyboard(event) {

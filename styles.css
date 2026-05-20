@@ -364,6 +364,80 @@ h2 {
   gap: 8px;
 }
 
+.field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.info-button {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line));
+  border-radius: 50%;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.info-button:hover {
+  border-color: var(--accent);
+}
+
+.help-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.help-panel[hidden] {
+  display: none;
+}
+
+.help-panel h3,
+.help-panel p,
+.help-panel ol {
+  margin: 0;
+}
+
+.help-panel h3 {
+  font-size: 0.98rem;
+}
+
+.help-panel ol {
+  padding-left: 1.25rem;
+}
+
+.help-panel code {
+  padding: 2px 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.help-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.help-links a {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
 select,
 input[type="password"],
 input[type="text"] {
