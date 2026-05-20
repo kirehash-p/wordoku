@@ -393,6 +393,15 @@
     setButtons();
     currentIndex = clamp(startIndex, 0, tokens.length - 1);
 
+    if (shouldUseGoogleContinuousPlayback()) {
+      await playGoogleContinuousFrom(currentIndex, activeRun);
+      if (activeRun === runId) {
+        isPlaying = false;
+        setButtons();
+      }
+      return;
+    }
+
     while (activeRun === runId && tokens[currentIndex]) {
       updateActiveWord();
       prefetchAhead(currentIndex + 1);
@@ -416,6 +425,28 @@
       isPlaying = false;
       setButtons();
     }
+  }
+
+  function shouldUseGoogleContinuousPlayback() {
+    return (
+      els.sourceSelect.value === "google" &&
+      getDelay() === 0 &&
+      els.orderSelect.value !== "repeat"
+    );
+  }
+
+  async function playGoogleContinuousFrom(startIndex, activeRun) {
+    let bundle = null;
+    try {
+      bundle = await getGoogleContextBundle(els.googleApiKeyInput.value.trim());
+    } catch {
+      if (activeRun === runId) updateStatus("音声を取得できません");
+      return;
+    }
+    if (activeRun !== runId || !bundle?.url) return;
+
+    updateStatus("Google Cloud TTS");
+    await playGoogleContinuousAudio(bundle, startIndex, activeRun);
   }
 
   async function playSingle(index) {
@@ -589,7 +620,7 @@
       };
     });
 
-    return { url, segments };
+    return { url, segments, duration: null };
   }
 
   function findNextGoogleStart(timepointMap, index) {
@@ -873,6 +904,74 @@
       audio.addEventListener("error", (event) => finish(reject, event), { once: true });
       audio.addEventListener("ended", () => finish(resolve), { once: true });
     });
+  }
+
+  function playGoogleContinuousAudio(bundle, startIndex, activeRun) {
+    stopCurrentAudioOnly();
+    return new Promise((resolve, reject) => {
+      const startSegment = bundle.segments[startIndex];
+      if (!startSegment) {
+        resolve();
+        return;
+      }
+
+      const audio = new Audio(bundle.url);
+      let settled = false;
+      let lastIndex = startIndex;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(watcher);
+        callback(value);
+      };
+      const watcher = window.setInterval(() => {
+        if (activeRun !== runId) {
+          audio.pause();
+          finish(resolve);
+          return;
+        }
+
+        const nextIndex = findGoogleIndexAtTime(bundle.segments, audio.currentTime, lastIndex);
+        if (nextIndex !== lastIndex) {
+          currentIndex = nextIndex;
+          lastIndex = nextIndex;
+          updateActiveWord();
+          scrollActiveWordIntoView();
+        }
+      }, 35);
+
+      currentAudio = audio;
+      currentIndex = startIndex;
+      lastIndex = startIndex;
+      updateActiveWord();
+      audio.playbackRate = getSpeed();
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          audio.currentTime = startSegment.start;
+          audio.play().catch((error) => finish(reject, error));
+        },
+        { once: true }
+      );
+      audio.addEventListener("error", (event) => finish(reject, event), { once: true });
+      audio.addEventListener("ended", () => {
+        currentIndex = tokens.length - 1;
+        updateStatus("完了");
+        finish(resolve);
+      }, { once: true });
+    });
+  }
+
+  function findGoogleIndexAtTime(segments, currentTime, fallbackIndex) {
+    for (let index = fallbackIndex + 1; index < segments.length; index += 1) {
+      const segment = segments[index];
+      if (segment && currentTime >= segment.start) {
+        fallbackIndex = index;
+      } else {
+        break;
+      }
+    }
+    return fallbackIndex;
   }
 
   function applySegmentFade(audio, start, end) {
